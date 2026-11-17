@@ -393,7 +393,7 @@ function vHoje() {
 function suggestions(k) {
   const plan = peekPlan(k);
   const titles = new Set(plan.items.map(i => i.title.toLowerCase()));
-  const ol = openLeaves().filter(id => !titles.has(node(id).title.toLowerCase())).slice(0, 8);
+  const ol = openLeaves().slice(0, 8);
   let pend = [], pendDay = null;
   for (let i = 1; i <= 7 && !pendDay; i++) {
     const pk = dayKey(addDays(new Date(), -i)), pp = state.days[pk];
@@ -401,7 +401,7 @@ function suggestions(k) {
   }
   return (ol.length || pend.length ? '<div class="sugg">' +
     (pend.length ? '<div><p class="hint">Pendentes de ' + DOW[(parseDay(pendDay).getDay() + 6) % 7].toLowerCase() + ':</p><div class="row">' + pend.map(x => '<button class="chip peach" data-act="planaddpend" data-day="' + pendDay + '" data-id="' + x.id + '">+ ' + esc(x.title) + "</button>").join("") + "</div></div>" : "") +
-    (ol.length ? '<div><p class="hint">Metas prontas para fazer:</p><div class="row">' + ol.map(id => '<button class="chip butter" data-act="planaddnode" data-id="' + id + '">+ ' + esc(node(id).title) + "</button>").join("") + "</div></div>" : "") +
+    (ol.length ? '<div><p class="hint">Metas prontas para fazer (toque para vincular a nova tarefa):</p><div class="row">' + ol.map(id => '<button class="chip butter" data-act="planpicknode" data-id="' + id + '" aria-pressed="' + (ui.newPlanNode === id) + '">+ ' + esc(node(id).title) + "</button>").join("") + "</div></div>" : "") +
   "</div>" : "");
 }
 function taskForm(inputId, ph, forWhat, act, btn, primary) {
@@ -967,6 +967,11 @@ function addPlanItem(k, title, nodeId, extra, color) {
   if (extra) it.extra = true;
   p.items.push(it); return it;
 }
+/** Deixa os chips de meta e a cor "Auto" em sincronia com a meta escolhida no formulário de nova tarefa. */
+function syncPlanPick() {
+  document.querySelectorAll('[data-act="planpicknode"]').forEach(x => x.setAttribute("aria-pressed", String(x.dataset.id === ui.newPlanNode)));
+  document.querySelectorAll('.taskform [data-act="newcolor"]').forEach(x => x.setAttribute("aria-pressed", String(x.dataset.c === (ui.newColor || ""))));
+}
 function focusSoon(sel) { setTimeout(() => { const el = $(sel); if (el) el.focus(); }, 0); }
 
 /* ---------- events ---------- */
@@ -990,6 +995,12 @@ document.addEventListener("click", e => {
     case "nav": go(b.dataset.v); break;
     /* planning */
     case "planadd": { const inp = $("#plan-in"), sel = $('[data-field="plannode"][data-for="plan"]'); const it = addPlanItem(tk, inp.value, sel ? sel.value : "", false, ui.newColor); if (!it) break; ui.newPlanNode = ""; ui.newColor = ""; save(); render(); focusSoon("#plan-in"); break; }
+    case "planpicknode": {
+      const sel = $('[data-field="plannode"][data-for="plan"]'); if (!sel) break;
+      ui.newPlanNode = ui.newPlanNode === id ? "" : id; sel.value = ui.newPlanNode;
+      ui.newColor = ""; syncPlanPick();
+      focusSoon("#plan-in"); break;
+    }
     case "planaddnode": { const n = node(id); if (!n) break; addPlanItem(tk, n.title, id); save(); render(); break; }
     case "planaddpend": { const pp = state.days[b.dataset.day]; const src = pp && pp.items.find(x => x.id === id); if (!src) break; const ni = addPlanItem(tk, src.title, src.node, false, src.color); if (ni) ni.rc = src.rc || ni.rc; save(); render(); break; }
     case "planrm": { const p = dayPlan(tk); if (ui.timer && ui.timer.taskId === id) break; p.items = p.items.filter(i => i.id !== id); if (p.next === id) p.next = null; save(); render(); toast("Tarefa removida."); break; }
@@ -1222,7 +1233,7 @@ document.addEventListener("change", e => {
     return;
   }
   const S = state.settings;
-  if (f === "plannode") { if (el.dataset.for === "plan") ui.newPlanNode = el.value; const inp = $(el.dataset.for === "extra" ? "#extra-in" : "#plan-in"); if (inp && !inp.value.trim() && el.value && node(el.value)) inp.value = node(el.value).title; }
+  if (f === "plannode") { if (el.dataset.for === "plan") { ui.newPlanNode = el.value; ui.newColor = ""; syncPlanPick(); } }
   else if (f === "nextpick") { dayPlan(todayKey()).next = el.value; save(); }
   else if (f === "habitnum") {
     clearTimeout(inputT);
