@@ -54,6 +54,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 
 /* buttons & fields */
 .btn{border:1px solid var(--line);background:var(--surface);padding:10px 16px;border-radius:10px;cursor:pointer;font-weight:600;min-height:44px}
+.filebtn{display:inline-flex;align-items:center;justify-content:center}
 .btn:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn.primary:hover{filter:brightness(1.08)}

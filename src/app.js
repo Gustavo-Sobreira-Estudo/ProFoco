@@ -749,12 +749,13 @@ function accountPanel() {
     ? '<div class="account">' + (u.picture ? '<img src="' + esc(u.picture) + '" alt="" width="44" height="44" referrerpolicy="no-referrer">' : '<span class="avatar">' + esc((u.name || u.email || "?").slice(0, 1).toUpperCase()) + "</span>") +
       '<div><b>' + esc(u.name || "") + '</b><span class="hint">' + esc(u.email || "") + "</span></div></div>" +
       '<p class="hint">Seus dados ficam no arquivo <code>profoco-data.json</code>, numa pasta oculta do app no seu Google Drive. Só o ProFoco acessa esse arquivo, e ele não aparece na sua lista de arquivos.</p>'
-    : '<p class="hint">Você está usando sem conta: os dados ficam só neste aparelho. Entre com o Google para acessar de qualquer lugar.</p>';
+    : '<p class="hint">Você está usando sem conta: os dados ficam só neste aparelho. Entre com o Google para acessar de qualquer lugar. ' + (ui.persisted === true ? "O navegador prometeu não apagar esses dados sozinho." : ui.persisted === false ? "O navegador pode apagar esses dados se faltar espaço: baixe um backup de vez em quando." : "") + "</p>";
   return '<div class="panel"><h2>Conta e dados</h2>' + who +
     '<p class="sync-line"><span class="dot"></span><span id="sync-line">' + esc(syncLine()) + "</span></p>" +
     '<div class="row">' +
       (u ? '<button class="btn primary" data-act="syncnow">Sincronizar agora</button><button class="btn" data-act="signout">Sair</button>' : '<button class="btn primary" data-act="gologin">Entrar com Google</button>') +
-      '<button class="btn" data-act="copybackup">Copiar backup</button><button class="btn" data-act="restoreopen">Restaurar backup</button>' +
+      '<button class="btn" data-act="downloadbackup">Baixar backup (arquivo)</button><label class="btn filebtn">Restaurar de arquivo<input type="file" accept=".json,application/json" data-field="importfile" hidden></label>' +
+      '<button class="btn" data-act="copybackup">Copiar backup</button><button class="btn" data-act="restoreopen">Restaurar colando texto</button>' +
       (ui.wipe ? '<button class="btn danger" data-act="wipeok">Confirmar: apagar tudo</button><button class="btn ghost" data-act="wipe">Cancelar</button>' : '<button class="btn ghost danger" data-act="wipe">Apagar tudo</button>') +
     "</div>" +
     (ui.restoreOpen ? '<textarea id="restore-t" placeholder="Cole aqui o backup copiado"></textarea><button class="btn primary" data-act="restore" style="justify-self:start">Restaurar</button>' : "") +
@@ -989,6 +990,14 @@ document.addEventListener("click", e => {
     case "pdelcancel": ui.pDel = null; render(); break;
     case "pdelok": state.plans = state.plans.filter(p => p.id !== id); ui.pDel = null; save(); render(); break;
     case "copybackup": copyText(JSON.stringify(state)); break;
+    case "downloadbackup": {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = "profoco-backup-" + todayKey() + ".json";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      toast("Backup baixado. Procure na pasta Downloads."); break;
+    }
     case "syncnow": if (ctx.store && ctx.store.syncNow) ctx.store.syncNow(); break;
     case "signout": if (ctx.onSignOut) ctx.onSignOut(); break;
     case "gologin": if (ctx.onSignIn) ctx.onSignIn(); break;
@@ -1045,6 +1054,16 @@ document.addEventListener("focusin", e => { const el = e.target; if (el.dataset 
 document.addEventListener("change", e => {
   if (!state) return;
   const el = e.target, f = el.dataset && el.dataset.field; if (!f) return;
+  if (f === "importfile") {
+    const file = el.files && el.files[0]; el.value = "";
+    if (!file) return;
+    file.text().then(txt => {
+      const data = JSON.parse(txt);
+      if (!data || typeof data !== "object" || !data.settings) throw new Error("formato");
+      state = migrate(data); save(); render(); toast("Backup restaurado.");
+    }).catch(() => toast("Esse arquivo não é um backup do ProFoco."));
+    return;
+  }
   const S = state.settings;
   if (f === "plannode") { if (el.dataset.for === "plan") ui.newPlanNode = el.value; const inp = $(el.dataset.for === "extra" ? "#extra-in" : "#plan-in"); if (inp && !inp.value.trim() && el.value && node(el.value)) inp.value = node(el.value).title; }
   else if (f === "nextpick") { dayPlan(todayKey()).next = el.value; save(); }
@@ -1087,6 +1106,10 @@ document.addEventListener("change", e => {
  */
 export function startApp(c) {
   ctx = c;
+  // Pede ao navegador para não apagar os dados do app sozinho quando faltar espaço.
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist().then(ok => { ui.persisted = !!ok; }).catch(() => {});
+  }
   state = c.initialState ? migrate(clone(c.initialState)) : defaults();
   const v = location.hash.slice(1);
   ui.view = VIEWS[ALIAS[v] || v] ? (ALIAS[v] || v) : "hoje";
