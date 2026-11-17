@@ -1,6 +1,8 @@
 // ProFoco — UI e lógica do app (módulo ES).
 // Renderização por templates de string + delegação de eventos (data-act / data-field).
 // Persistência é injetada por main.js via startApp({ store, ... }).
+import { PIX_KEY } from "./config.js";
+
 /* ---------- helpers ---------- */
 const $ = (s, el) => (el || document).querySelector(s);
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -21,6 +23,19 @@ const todayKey = () => dayKey(new Date());
 const COLORS = ["sky", "mint", "peach", "rose", "butter", "lilac"];
 const COLOR_NAMES = { sky: "Azul", mint: "Verde", peach: "Pêssego", rose: "Rosa", butter: "Amarelo", lilac: "Lilás" };
 const plural = (n, s, p) => n + " " + (n === 1 ? s : (p || s + "s"));
+
+/* ---------- apoio voluntário (Pix) ---------- */
+const SUPPORT_VIEWS = ["objetivos", "semana", "perfil", "seentao"];
+/** Linha discreta no fim das abas secundárias. Sem chave Pix configurada, não aparece. */
+function supportLine() {
+  if (!PIX_KEY) return "";
+  return '<p class="support">ProFoco é gratuito e sem anúncios. Se ele ajuda você, <button class="linkbtn" data-act="copypix">copie a chave Pix</button> e apoie com qualquer valor.</p>';
+}
+function supportPanel() {
+  if (!PIX_KEY) return "";
+  return '<div class="panel"><h2>Apoie o ProFoco</h2><p class="hint">O ProFoco é gratuito, não tem anúncios e não rastreia você. Se ele ajuda nos seus estudos, você pode apoiar o projeto com um Pix de qualquer valor. É totalmente opcional.</p>' +
+    '<div class="row"><code class="pixkey">' + esc(PIX_KEY) + '</code><button class="btn primary" data-act="copypix">Copiar chave Pix</button></div></div>';
+}
 
 /* ---------- state ---------- */
 const PCATS = ["Começar", "Distração", "Travar", "Emoção", "Rotina", "Outro"];
@@ -799,6 +814,7 @@ function vAjustes() {
   return '<section class="view">' +
     '<div class="head"><div><p class="eyebrow">Conta, hábitos e foco</p><h1>Ajustes</h1></div></div>' +
     accountPanel() +
+    supportPanel() +
     '<div class="panel"><h2>Hábitos</h2><p class="hint">Escolha poucos. Hábitos levam em média cerca de dois meses para ficar automáticos, com muita variação entre pessoas (Lally et al., 2010).</p>' +
       '<div class="habs">' + state.habits.map(h => '<div class="habcard" style="--hc:var(--' + h.color + '-ink)">' +
         '<div class="habcard-top"><input type="text" data-field="hname" data-id="' + h.id + '" value="' + esc(h.name) + '" aria-label="Nome do hábito"><button class="btn small ghost danger" data-act="hdel" data-id="' + h.id + '">Remover</button></div>' +
@@ -853,7 +869,9 @@ function updatePill() {
   pill.title = (t.phase === "focus" ? "Foco" : "Descanso") + (it ? ": " + it.title : "") + ". Toque para voltar ao Hoje.";
 }
 function render() {
-  $("#app").innerHTML = VIEWS[ui.view]();
+  let html = VIEWS[ui.view]();
+  if (SUPPORT_VIEWS.includes(ui.view)) html = html.replace(/<\/section>\s*$/, supportLine() + "</section>");
+  $("#app").innerHTML = html;
   updatePill();
   document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-current", b.dataset.v === ui.view ? "page" : "false"));
   if (ui.view === "objetivos") fitTrees();
@@ -1030,6 +1048,7 @@ document.addEventListener("click", e => {
     case "pdel": ui.pDel = id; render(); break;
     case "pdelcancel": ui.pDel = null; render(); break;
     case "pdelok": state.plans = state.plans.filter(p => p.id !== id); ui.pDel = null; save(); render(); break;
+    case "copypix": copyText(PIX_KEY); toast("Chave Pix copiada. Obrigado pelo apoio!"); break;
     case "copybackup": copyText(JSON.stringify(state)); break;
     case "downloadbackup": {
       const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });

@@ -3,6 +3,10 @@
 // Passo a passo no README.md. Esse ID é público por natureza: não é segredo.
 export const GOOGLE_CLIENT_ID = "898513177063-adtf14hd7re5vi4sl6cphom7cdhu2a44.apps.googleusercontent.com";
 
+// Chave Pix para apoio voluntário (e-mail, telefone, CPF/CNPJ ou chave aleatória).
+// Deixe vazio ("") para esconder os avisos de apoio. Atenção: o repositório é público, então esta chave também fica pública.
+export const PIX_KEY = "";
+
 // Nome do arquivo salvo na pasta oculta do app (appDataFolder) no Google Drive de cada usuário.
 export const DATA_FILE = "profoco-data.json";
 
