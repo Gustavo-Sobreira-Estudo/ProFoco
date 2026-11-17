@@ -2,6 +2,7 @@
 // Renderização por templates de string + delegação de eventos (data-act / data-field).
 // Persistência é injetada por main.js via startApp({ store, ... }).
 import { PIX_KEY } from "./config.js";
+import * as cal from "./calendar.js";
 
 /* ---------- helpers ---------- */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -23,6 +24,55 @@ const todayKey = () => dayKey(new Date());
 const COLORS = ["sky", "mint", "peach", "rose", "butter", "lilac"];
 const COLOR_NAMES = { sky: "Azul", mint: "Verde", peach: "Pêssego", rose: "Rosa", butter: "Amarelo", lilac: "Lilás" };
 const plural = (n, s, p) => n + " " + (n === 1 ? s : (p || s + "s"));
+
+/* ---------- agenda (Google Agenda, só leitura) ---------- */
+function agendaInner() {
+  if (!state.settings.calendar) return "";
+  const c = ui.cal, now = Date.now(), ev = c.events;
+  const reconnect = '<div class="row"><button class="btn small" data-act="calconnect">' + (ev.length ? "Atualizar agenda" : "Reconectar agenda") + "</button></div>";
+  if (!ev.length) {
+    return c.status === "needauth" ? '<div class="panel agenda"><div class="panel-head"><h2>Agenda de hoje</h2></div><p class="hint">Reconecte a agenda para ver seus eventos de hoje neste aparelho.</p>' + reconnect + "</div>" : "";
+  }
+  const rows = ev.map(e => {
+    const live = !e.allDay && e.start <= now && now < e.end, past = !e.allDay && e.end <= now;
+    const when = e.allDay ? "Dia todo" : fmtTime(e.start) + "–" + fmtTime(e.end);
+    const title = e.link ? '<a href="' + esc(e.link) + '" target="_blank" rel="noopener noreferrer">' + esc(e.title) + "</a>" : esc(e.title);
+    return '<li class="agrow' + (past ? " past" : "") + (live ? " live" : "") + '"><span class="agtime">' + when + '</span><div class="agmain"><span class="t">' + title + "</span>" +
+      (e.place ? '<span class="tm">' + esc(e.place) + "</span>" : "") + "</div>" +
+      (live ? '<span class="chip sky">agora</span>' : "") + (e.meet && !past ? '<a class="chip" href="' + esc(e.meet) + '" target="_blank" rel="noopener noreferrer">Entrar</a>' : "") + "</li>";
+  }).join("");
+  return '<div class="panel agenda"><div class="panel-head"><h2>Agenda de hoje</h2><span class="chip sky">' + plural(ev.length, "evento") + "</span></div>" +
+    '<ul class="aglist">' + rows + "</ul>" + (c.status === "needauth" ? '<p class="hint">Mostrando a última leitura. A permissão deste aparelho expirou.</p>' + reconnect : "") + "</div>";
+}
+/* O painel mora num contêiner fixo: atualiza só ele, sem redesenhar a tela (não tira o foco de quem digita). */
+function agendaHTML() { const h = agendaInner(); return '<div id="agenda"' + (h ? "" : " hidden") + ">" + h + "</div>"; }
+function paintAgenda() { const el = $("#agenda"); if (!el) return; const h = agendaInner(); el.innerHTML = h; el.hidden = !h; }
+async function refreshAgenda() {
+  if (!state || !state.settings.calendar) return;
+  const day = todayKey();
+  if (ui.cal.day !== day) { ui.cal.day = day; ui.cal.events = cal.loadCache(day); }
+  const tok = cal.getToken();
+  if (!tok) { ui.cal.status = "needauth"; paintAgenda(); return; }
+  try {
+    ui.cal.events = await cal.fetchToday(tok); ui.cal.status = "ok"; cal.saveCache(day, ui.cal.events);
+  } catch (e) {
+    if (e.code === "auth") { cal.disconnect(); ui.cal.status = "needauth"; } else ui.cal.status = "error";
+  }
+  paintAgenda(); if (ui.view === "ajustes") { const l = $("#cal-line"); if (l) l.textContent = calLine(); }
+}
+function calLine() {
+  const S = state.settings, c = ui.cal;
+  if (!S.calendar) return "Desconectada.";
+  if (c.status === "needauth") return "Conectada, mas a permissão deste aparelho expirou. Toque em Reconectar.";
+  if (c.status === "error") return "Conectada, mas não consegui ler a agenda agora.";
+  return "Conectada. " + (c.events.length ? plural(c.events.length, "evento") + " hoje." : "Nenhum evento hoje.");
+}
+function calendarPanel() {
+  const S = state.settings, on = !!S.calendar, expired = on && ui.cal.status === "needauth";
+  return '<div class="panel"><h2>Google Agenda</h2><p class="hint">Mostra em Hoje os eventos do dia das suas agendas. É só leitura: o ProFoco não cria, altera nem apaga eventos, e os eventos não são salvos no Drive.</p>' +
+    '<p class="sync-line"><span class="dot"></span><span id="cal-line">' + esc(calLine()) + "</span></p>" +
+    '<div class="row">' + (on ? (expired ? '<button class="btn primary" data-act="calconnect">Reconectar</button>' : '<button class="btn" data-act="calrefresh">Atualizar agora</button>') + '<button class="btn ghost danger" data-act="caloff">Desconectar</button>' : '<button class="btn primary" data-act="calconnect">Conectar Google Agenda</button>') + "</div></div>";
+}
 
 /* ---------- apoio voluntário (Pix) ---------- */
 const SUPPORT_VIEWS = ["objetivos", "semana", "perfil", "seentao"];
@@ -48,7 +98,7 @@ function fixPlan(p) {
 function defaults() {
   return {
     v: 2, updatedAt: 0, createdDay: todayKey(),
-    settings: { wake: "08:00", goal: 2, min: 1, focus: 25, brk: 5, long: 15, theme: "auto", accent: "lilac" },
+    settings: { wake: "08:00", goal: 2, min: 1, focus: 25, brk: 5, long: 15, theme: "auto", accent: "lilac", calendar: false },
     habits: [
       { id: "wake", name: "Acordar no horário", kind: "check", per: "day", n: 1, color: "sky", wake: true },
       { id: "ex", name: "Exercício", kind: "check", per: "week", n: 3, color: "mint" },
@@ -90,6 +140,7 @@ function migrate(s) {
 let state = null;
 let ctx = { store: null, user: null };
 const ui = { syncStatus: "", syncDetail: "", view: "hoje", step: null, feel: [], swap: false, weekOff: 0, revOff: 0, wipe: false, afterDone: null, timer: null, restoreOpen: false, sel: null, edit: null, divide: null, confirmDel: null, newPlanNode: "", newColor: "", lockConfirm: false, extraOpen: false, pMenu: null, daysOpen: false, lastTask: null, branch: null, pEdit: null, pDel: null, pFilter: "Todas" };
+ui.cal = { events: [], status: "idle", day: null };
 
 /* ---------- persistence (injetada) ---------- */
 const STATUS_TEXT = { synced: "Salvo no Drive", syncing: "Salvando no Drive…", pending: "Alterações a salvar", offline: "Sem internet: salvo neste aparelho", reauth: "Reconecte para salvar no Drive", error: "Erro ao salvar no Drive", local: "Salvo só neste aparelho" };
@@ -112,6 +163,7 @@ export function applyRemoteState(remote) {
   state = migrate(clone(remote));
   applyTheme();
   render();
+  if (state.settings.calendar) refreshAgenda();
 }
 const THEME_NAMES = { auto: "Automático", light: "Claro", dark: "Escuro" };
 const ACCENTS = ["lilac", "sky", "mint", "peach", "rose"];
@@ -330,7 +382,7 @@ function vHoje() {
   return '<section class="view">' +
     '<div class="head"><div><p class="eyebrow">' + esc(fmtLong.format(now)) + '</p><h1>Hoje</h1></div>' +
     '<p class="daysum"><b>' + td + "/" + tn + "</b> tarefas · <b>" + done + "/" + S.goal + "</b> pomodoros</p></div>" +
-    focusCard() + planPanel(k) + banner +
+    focusCard() + planPanel(k) + agendaHTML() + banner +
     habitsPanel() +
     (pinned.length ? '<div class="panel"><div class="panel-head"><h2>Se–então em destaque</h2><button class="btn small ghost" data-act="nav" data-v="seentao">Ver todos</button></div><ul class="plans-list">' +
       pinned.map(p => '<li style="background:var(--' + (PCAT_COLOR[p.cat] || "sky") + ')"><span><b>' + esc(p.a) + ",</b> " + esc(p.b) + '.</span><button class="btn small" data-act="puse" data-id="' + p.id + '">Usei</button></li>').join("") +
@@ -814,6 +866,7 @@ function vAjustes() {
   return '<section class="view">' +
     '<div class="head"><div><p class="eyebrow">Conta, hábitos e foco</p><h1>Ajustes</h1></div></div>' +
     accountPanel() +
+    calendarPanel() +
     supportPanel() +
     '<div class="panel"><h2>Hábitos</h2><p class="hint">Escolha poucos. Hábitos levam em média cerca de dois meses para ficar automáticos, com muita variação entre pessoas (Lally et al., 2010).</p>' +
       '<div class="habs">' + state.habits.map(h => '<div class="habcard" style="--hc:var(--' + h.color + '-ink)">' +
@@ -1048,6 +1101,15 @@ document.addEventListener("click", e => {
     case "pdel": ui.pDel = id; render(); break;
     case "pdelcancel": ui.pDel = null; render(); break;
     case "pdelok": state.plans = state.plans.filter(p => p.id !== id); ui.pDel = null; save(); render(); break;
+    case "calconnect": {
+      const retry = ui.cal.status === "scope";
+      cal.connect({ hint: ctx.user && ctx.user.email, prompt: retry ? "consent" : "" })
+        .then(() => { S.calendar = true; ui.cal.status = "idle"; ui.cal.day = null; save(); render(); toast("Agenda conectada."); return refreshAgenda(); })
+        .catch(err => { if (err.code === "cal_scope") ui.cal.status = "scope"; toast(cal.friendlyError(err)); });
+      break;
+    }
+    case "calrefresh": refreshAgenda().then(() => toast("Agenda atualizada.")); break;
+    case "caloff": S.calendar = false; cal.disconnect(); ui.cal = { events: [], status: "idle", day: null }; save(); render(); toast("Agenda desconectada deste aparelho."); break;
     case "copypix": copyText(PIX_KEY); toast("Chave Pix copiada. Obrigado pelo apoio!"); break;
     case "copybackup": copyText(JSON.stringify(state)); break;
     case "downloadbackup": {
@@ -1157,6 +1219,10 @@ document.addEventListener("change", e => {
   else if (f === "rev" || f === "plana" || f === "planb" || f === "hname" || f === "hunit") { clearTimeout(inputT); save(); }
 });
 
+/* Agenda: atualiza a cada 5 minutos e ao voltar para o app. */
+setInterval(() => { if (state && state.settings.calendar && !document.hidden) refreshAgenda(); }, 5 * 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && state && state.settings.calendar) refreshAgenda(); });
+
 /* ---------- boot ---------- */
 /**
  * Inicia a interface.
@@ -1174,6 +1240,8 @@ export function startApp(c) {
   }
   state = c.initialState ? migrate(clone(c.initialState)) : defaults();
   applyTheme();
+  cal.prepare().catch(() => {});
+  if (state.settings.calendar) { ui.cal.day = todayKey(); ui.cal.events = cal.loadCache(ui.cal.day); refreshAgenda(); }
   const v = location.hash.slice(1);
   ui.view = VIEWS[ALIAS[v] || v] ? (ALIAS[v] || v) : "hoje";
   render();

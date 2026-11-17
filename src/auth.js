@@ -7,7 +7,7 @@ const TOKEN_KEY = "profoco:token";
 const DRIVE_SCOPE = SCOPES[SCOPES.length - 1];
 let client = null;
 
-function waitForGis(timeoutMs = 10000) {
+export function waitForGis(timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     const t0 = Date.now();
     (function check() {

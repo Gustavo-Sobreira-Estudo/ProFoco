@@ -74,6 +74,7 @@ async function reauth(user) {
 
 function signOut() {
   auth.clearToken();
+  try { localStorage.removeItem("profoco:caltoken"); localStorage.removeItem("profoco:calcache"); } catch (e) { /* ignore */ }
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(MODE_KEY);
   location.hash = "";

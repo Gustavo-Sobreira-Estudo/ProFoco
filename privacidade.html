@@ -36,6 +36,7 @@
   <h2>Quais dados o ProFoco usa</h2>
   <ul>
     <li><b>Dados que você cria no app:</b> objetivos, tarefas do dia, hábitos, planos se–então, registros de sessões de foco e revisões semanais.</li>
+    <li><b>Seus eventos do Google Agenda</b> (só se você ativar em Ajustes): título, horário, local e link dos eventos de hoje, para mostrá-los na tela Hoje. A leitura é somente leitura: o ProFoco não cria, altera nem apaga eventos.</li>
     <li><b>Dados do seu perfil Google</b> (só se você entrar com o Google): nome, endereço de e-mail e foto. Eles são exibidos na tela de Ajustes para você saber qual conta está conectada.</li>
   </ul>
 
@@ -43,12 +44,14 @@
   <ul>
     <li><b>No seu aparelho:</b> uma cópia fica no armazenamento do navegador (<code>localStorage</code>), para o app funcionar offline.</li>
     <li><b>No seu Google Drive:</b> se você entrar com o Google, os dados são salvos no arquivo <code>profoco-data.json</code>, dentro da pasta oculta do aplicativo (<code>appDataFolder</code>). Só o ProFoco acessa essa pasta, e o arquivo não aparece na sua lista de arquivos do Drive.</li>
+    <li><b>Eventos da agenda:</b> são lidos direto do Google para o seu navegador e guardados apenas em uma cópia temporária no seu aparelho. Eles <b>não</b> vão para o Google Drive nem para nenhum servidor do ProFoco.</li>
     <li><b>Não existe servidor do ProFoco.</b> Os dados vão direto do seu navegador para o seu Google Drive. Quem mantém o projeto não recebe, vê nem armazena nenhum dado seu.</li>
   </ul>
 
   <h2>Permissões pedidas ao Google</h2>
   <ul>
     <li><code>openid</code>, <code>email</code> e <code>profile</code>: identificar a sua conta e mostrar nome, e-mail e foto.</li>
+    <li><code>calendar.readonly</code> (opcional): ler os eventos das suas agendas selecionadas, apenas para exibi-los em Hoje.</li>
     <li><code>drive.appdata</code>: criar e ler o arquivo do ProFoco na pasta oculta do aplicativo. Essa permissão <b>não dá acesso</b> aos seus outros arquivos do Drive.</li>
   </ul>
   <p>O uso das informações recebidas das APIs do Google segue a <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de Uso Limitado.</p>
@@ -63,6 +66,7 @@
   <ul>
     <li><b>Apagar os dados do aparelho:</b> em Ajustes, use “Apagar tudo”, ou limpe os dados do site nas configurações do navegador.</li>
     <li><b>Apagar os dados do Drive:</b> em <a href="https://drive.google.com/drive/u/0/settings">Configurações do Drive</a> › Gerenciar aplicativos › ProFoco › “Excluir dados ocultos do aplicativo”.</li>
+    <li><b>Desconectar a agenda:</b> em Ajustes › Google Agenda › Desconectar (apaga o acesso e a cópia neste aparelho).</li>
     <li><b>Revogar o acesso:</b> em <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>, remova o ProFoco.</li>
     <li><b>Backup:</b> em Ajustes você pode baixar uma cópia dos seus dados em arquivo.</li>
   </ul>
