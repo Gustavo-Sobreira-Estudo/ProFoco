@@ -20,7 +20,7 @@ HTML + CSS + JavaScript puro (módulos ES, **sem build, sem dependências**). Lo
 | `src/drive.js` | REST do Drive v3: `findFile`, `download`, `createFile`, `updateFile` |
 | `src/storage.js` | `SyncStore` (cache local + Drive) e `LocalStore` (só aparelho); `decide()` |
 | `src/app.js` | Toda a UI e regras: estado, telas, eventos (≈1100 linhas, seções marcadas com `/* ---------- NOME ---------- */`) |
-| `src/styles.css` | Tokens no `:root` e estilos; tema claro pastel único |
+| `src/styles.css` | Tokens no `:root` e estilos; temas claro pastel (padrão), escuro e automático |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA instalável e uso offline |
 | `tests/storage.test.mjs` | Testes da sincronização |
 | `deploy/github-pages.yml` | Workflow de deploy; copie para `.github/workflows/deploy.yml` |
@@ -49,7 +49,7 @@ HTML + CSS + JavaScript puro (módulos ES, **sem build, sem dependências**). Lo
 - **Sem servidor e sem custos**: não adicionar backend, banco ou serviços pagos. Dados só no Drive do usuário.
 - **Sem dependências** de npm em runtime. Bibliotecas só se forem indispensáveis, via CDN com versão fixa.
 - **Acessibilidade**: alvos de toque ≥ 40 px, foco visível, `aria-label` em botões só com ícone, nomes de cor em português.
-- **Design**: use os tokens do `:root` (`--lilac`, `--mint`, `--peach`, `--sky`, `--butter`, `--rose` e versões `-ink`). Tema claro pastel único.
+- **Design**: use os tokens do `:root` (`--lilac`, `--mint`, `--peach`, `--sky`, `--butter`, `--rose` e versões `-ink`). Temas claro, escuro e automático (Ajustes › Aparência): use sempre os tokens, nunca cores fixas.
 - Ao mudar arquivos do app, aumente `CACHE` em `sw.js` para os usuários receberem a versão nova.
 - Rode `npm test` antes de commitar.
 

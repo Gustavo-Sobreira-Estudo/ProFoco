@@ -33,7 +33,7 @@ function fixPlan(p) {
 function defaults() {
   return {
     v: 2, updatedAt: 0, createdDay: todayKey(),
-    settings: { wake: "08:00", goal: 2, min: 1, focus: 25, brk: 5 },
+    settings: { wake: "08:00", goal: 2, min: 1, focus: 25, brk: 5, long: 15, theme: "auto", accent: "lilac" },
     habits: [
       { id: "wake", name: "Acordar no horário", kind: "check", per: "day", n: 1, color: "sky", wake: true },
       { id: "ex", name: "Exercício", kind: "check", per: "week", n: 3, color: "mint" },
@@ -95,8 +95,21 @@ function save() {
 /** Substitui o estado pelo que veio do Drive (outro aparelho salvou depois). */
 export function applyRemoteState(remote) {
   state = migrate(clone(remote));
+  applyTheme();
   render();
 }
+const THEME_NAMES = { auto: "Automático", light: "Claro", dark: "Escuro" };
+const ACCENTS = ["lilac", "sky", "mint", "peach", "rose"];
+/** Aplica tema (claro/escuro/automático) e cor de destaque, e guarda uma cópia local para a próxima abertura. */
+function applyTheme() {
+  const S = state ? state.settings : {};
+  const theme = THEME_NAMES[S.theme] ? S.theme : "auto", accent = ACCENTS.includes(S.accent) ? S.accent : "lilac";
+  const r = document.documentElement; r.dataset.theme = theme; r.dataset.accent = accent;
+  try { localStorage.setItem("profoco:theme", JSON.stringify({ theme, accent })); } catch (e) {}
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.content = getComputedStyle(r).getPropertyValue("--paper").trim() || "#f6f4fb";
+}
+try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (state) applyTheme(); }); } catch (e) {}
 export function getState() { return state ? clone(state) : null; }
 
 /* ---------- days, log, habits ---------- */
@@ -194,14 +207,20 @@ function itemsForNode(id) { let c = 0; Object.values(state.days).forEach(p => p.
 let audioCtx = null;
 function beep() {
   try {
-    if (!audioCtx) return;
-    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-    o.type = "sine"; o.frequency.value = 660; g.gain.value = 0.0001;
-    o.connect(g); g.connect(audioCtx.destination); o.start();
-    g.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.9);
-    o.stop(audioCtx.currentTime + 1);
+    if (audioCtx) {
+      const now = audioCtx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const t0 = now + i * 0.42, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = "sine"; o.frequency.value = i === 2 ? 880 : 660;
+        o.connect(g); g.connect(audioCtx.destination);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.3, t0 + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.34);
+        o.start(t0); o.stop(t0 + 0.4);
+      }
+    }
   } catch (e) {}
+  try { if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]); } catch (e) {}
 }
 function primeAudio() { try { if (!audioCtx) { const A = window.AudioContext || window.webkitAudioContext; if (A) audioCtx = new A(); } if (audioCtx && audioCtx.state === "suspended") audioCtx.resume(); } catch (e) {} }
 function abandonTimer() {
@@ -209,9 +228,14 @@ function abandonTimer() {
   if (t.phase === "focus" && t.total - timeLeft() >= t.total / 2) { const l = logDay(todayKey()); l.s = (l.s || 0) + 1; l.g = state.settings.goal; save(); toast("Sessão anterior registrada."); }
   ui.timer = null; ui.step = null; document.title = "ProFoco";
 }
-function startTimer(phase, minutes, taskId) {
+/** Descanso depois do pomodoro atual: a cada 4 pomodoros do dia, o descanso é o longo. */
+function breakInfo() {
+  const S = state.settings, n = L(todayKey()).s || 0, long = n > 0 && n % 4 === 0;
+  return { long, min: long ? (S.long || 15) : S.brk };
+}
+function startTimer(phase, minutes, taskId, long) {
   const ms = minutes * 60000;
-  ui.timer = { phase, total: ms, endAt: Date.now() + ms, left: ms, paused: false, taskId: taskId || null };
+  ui.timer = { phase, total: ms, endAt: Date.now() + ms, left: ms, paused: false, taskId: taskId || null, long: !!long };
   ui.step = "running"; render();
 }
 function timeLeft() { const t = ui.timer; if (!t) return 0; return t.paused ? t.left : Math.max(0, t.endAt - Date.now()); }
@@ -224,11 +248,11 @@ function finishTimer(early) {
     const counts = !early || elapsed >= t.total / 2;
     if (counts) { const l = logDay(todayKey()); l.s = (l.s || 0) + 1; l.g = state.settings.goal; save(); }
     if (!early) beep();
-    toast(counts ? "Sessão registrada." : "Encerrada antes da metade: não contou. Tudo bem.");
+    toast(counts ? "Pomodoro registrado." : "Encerrada antes da metade: não contou. Tudo bem.");
     ui.step = "after"; ui.afterDone = null;
   } else {
-    if (!early) beep();
-    toast("Pausa terminada."); ui.step = null;
+    if (!early) { beep(); toast("Descanso terminado."); }
+    ui.step = early ? null : "breakend";
   }
   document.title = "ProFoco";
   render(); updatePill();
@@ -239,7 +263,7 @@ setInterval(() => {
   const d = $("#digits"); if (d) d.textContent = fmtMs(left);
   updatePill();
   const b = $("#bar>i"); if (b) b.style.width = (100 * (1 - left / t.total)).toFixed(2) + "%";
-  document.title = fmtMs(left) + (t.phase === "focus" ? " · foco" : " · pausa") + " · ProFoco";
+  document.title = fmtMs(left) + (t.phase === "focus" ? " · foco" : " · descanso") + " · ProFoco";
   if (!t.paused && left <= 0) finishTimer(false);
 }, 250);
 
@@ -277,30 +301,30 @@ function metaChip(i) { return i.node && node(i.node) ? '<span class="chip butter
 function metaText(i) { return i.node && node(i.node) ? esc(node(i.node).title) : ""; }
 
 /* ---------- HOJE ---------- */
-function allTasksDone(k) { const p = peekPlan(k); return p.locked && p.items.length > 0 && p.items.every(i => i.done); }
+function allTasksDone(k) { const p = peekPlan(k); return p.items.length > 0 && p.items.every(i => i.done); }
 function vHoje() {
   const now = new Date(), k = dayKey(now), l = L(k), S = state.settings, plan = peekPlan(k);
   const done = l.s || 0, tn = plan.items.length, td = plan.items.filter(i => i.done).length;
   let banner = "";
   const pk = dayKey(prevWorkday(now));
   if (allTasksDone(k)) banner = '<div class="banner mint"><b>Todas as tarefas do dia estão concluídas.</b> O resto do dia é seu.</div>';
-  else if (plan.locked && done === 0 && pk >= state.createdDay && (L(pk).s || 0) === 0 && Object.keys(state.log).some(x => x < k))
+  else if (tn > 0 && done === 0 && pk >= state.createdDay && (L(pk).s || 0) === 0 && Object.keys(state.log).some(x => x < k))
     banner = '<div class="banner"><b>Ontem não teve sessão.</b> Acontece, e um dia perdido não desfaz o hábito. Hoje vale a versão mínima: ' + plural(S.min, "pomodoro") + ".</div>";
   else if (done >= S.goal && !ui.timer) banner = '<div class="banner mint"><b>Meta de pomodoros cumprida.</b> Se parar agora, a próxima largada fica mais fácil.</div>';
   const pinned = state.plans.filter(p => p.active && p.pinned);
   return '<section class="view">' +
     '<div class="head"><div><p class="eyebrow">' + esc(fmtLong.format(now)) + '</p><h1>Hoje</h1></div>' +
-    (plan.locked ? '<p class="daysum"><b>' + td + "/" + tn + "</b> tarefas · <b>" + done + "/" + S.goal + "</b> pomodoros</p>" : "") + "</div>" +
+    (tn ? '<p class="daysum"><b>' + td + "/" + tn + "</b> tarefas · <b>" + done + "/" + S.goal + "</b> pomodoros</p>" : "") + "</div>" +
     banner +
-    (plan.locked ? focusCard() + planPanel(k) : planningCard(k)) +
+    focusCard() + planPanel(k) +
     habitsPanel() +
     (pinned.length ? '<div class="panel"><div class="panel-head"><h2>Se–então em destaque</h2><button class="btn small ghost" data-act="nav" data-v="seentao">Ver todos</button></div><ul class="plans-list">' +
       pinned.map(p => '<li style="background:var(--' + (PCAT_COLOR[p.cat] || "sky") + ')"><span><b>' + esc(p.a) + ",</b> " + esc(p.b) + '.</span><button class="btn small" data-act="puse" data-id="' + p.id + '">Usei</button></li>').join("") +
     "</ul></div>" : "") +
-    '<details class="why"><summary>Por que funciona assim?</summary><p><b>Por que listar as tarefas antes e não poder apagar?</b> Decidir de antemão o que, quando e onde aproxima a intenção da ação (Gollwitzer e Sheeran, 2006), e um compromisso que não dá para desfazer protege contra o impulso do momento. <b>Por que acompanhar sequências?</b> Registrar o progresso aumenta o alcance de metas (Harkin et al., 2016), e falhar um dia não interrompe a formação do hábito (Lally et al., 2010).</p></details>' +
+    '<details class="why"><summary>Por que funciona assim?</summary><p><b>Por que listar as tarefas antes?</b> Decidir de antemão o que fazer aproxima a intenção da ação (Gollwitzer e Sheeran, 2006). <b>Por que o descanso longo?</b> Sessões curtas de foco com pausas regulares tornam o trabalho sustentável (Boice, 1989, 1997); a cada 4 pomodoros a pausa é mais longa. <b>Por que acompanhar sequências?</b> Registrar o progresso aumenta o alcance de metas (Harkin et al., 2016), e falhar um dia não interrompe a formação do hábito (Lally et al., 2010).</p></details>' +
     "</section>";
 }
-function planningCard(k) {
+function suggestions(k) {
   const plan = peekPlan(k);
   const titles = new Set(plan.items.map(i => i.title.toLowerCase()));
   const ol = openLeaves().filter(id => !titles.has(node(id).title.toLowerCase())).slice(0, 8);
@@ -309,23 +333,10 @@ function planningCard(k) {
     const pk = dayKey(addDays(new Date(), -i)), pp = state.days[pk];
     if (pp && pp.items.length) { pendDay = pk; pend = pp.items.filter(x => !x.done && !x.moved && !titles.has(x.title.toLowerCase())); }
   }
-  const firstRun = !Object.keys(state.days).some(x => x < k && state.days[x].items.length);
-  return '<div class="focus">' +
-    '<h2 class="focus-title">Tarefas do dia</h2>' +
-    (firstRun ? '<ol class="steps" aria-label="Como funciona"><li><b>1</b>Liste as tarefas</li><li><b>2</b>Toque em Iniciar dia</li><li><b>3</b>Use Iniciar em cada tarefa</li></ol>' : "") +
-    taskForm("plan-in", "Escreva a tarefa", "plan", "planadd", "Adicionar tarefa", true) +
-    (ol.length || pend.length ? '<div class="sugg">' +
-      (pend.length ? '<div><p class="hint">Pendentes de ' + DOW[(parseDay(pendDay).getDay() + 6) % 7].toLowerCase() + ':</p><div class="row">' + pend.map(x => '<button class="chip peach" data-act="planaddpend" data-day="' + pendDay + '" data-id="' + x.id + '">+ ' + esc(x.title) + "</button>").join("") + "</div></div>" : "") +
-      (ol.length ? '<div><p class="hint">Metas prontas para fazer:</p><div class="row">' + ol.map(id => '<button class="chip butter" data-act="planaddnode" data-id="' + id + '">+ ' + esc(node(id).title) + "</button>").join("") + "</div></div>" : "") +
-    "</div>" : "") +
-    (plan.items.length ? '<ul class="tlist">' + plan.items.map(it => {
-      const c = taskColor(it);
-      return '<li class="trow plan" style="--tc:var(--' + c + ');--tci:var(--' + c + '-ink)"><span class="tcolor" aria-hidden="true"></span><div class="tmain"><span class="t">' + esc(it.title) + '</span><span class="tm">' + metaText(it) + '</span></div><button class="btn small ghost danger" data-act="planrm" data-id="' + it.id + '" aria-label="Remover ' + esc(it.title) + '">Remover</button></li>';
-    }).join("") + "</ul>" : "") +
-    '<div class="row" style="justify-content:space-between"><span class="hint">' + plural(plan.items.length, "tarefa") + "</span>" +
-      (ui.lockConfirm ? '<div class="row"><span class="lockwarn">Depois disso as tarefas não podem ser removidas.</span><button class="btn ghost" data-act="planlockcancel">Voltar</button><button class="btn primary big" data-act="planlock">Confirmar e iniciar</button></div>'
-        : '<button class="btn primary big" data-act="planlockask"' + (plan.items.length ? "" : " disabled") + ">Iniciar dia</button>") + "</div>" +
-    "</div>";
+  return (ol.length || pend.length ? '<div class="sugg">' +
+    (pend.length ? '<div><p class="hint">Pendentes de ' + DOW[(parseDay(pendDay).getDay() + 6) % 7].toLowerCase() + ':</p><div class="row">' + pend.map(x => '<button class="chip peach" data-act="planaddpend" data-day="' + pendDay + '" data-id="' + x.id + '">+ ' + esc(x.title) + "</button>").join("") + "</div></div>" : "") +
+    (ol.length ? '<div><p class="hint">Metas prontas para fazer:</p><div class="row">' + ol.map(id => '<button class="chip butter" data-act="planaddnode" data-id="' + id + '">+ ' + esc(node(id).title) + "</button>").join("") + "</div></div>" : "") +
+  "</div>" : "");
 }
 function taskForm(inputId, ph, forWhat, act, btn, primary) {
   return '<div class="taskform"><input type="text" id="' + inputId + '" placeholder="' + ph + '" aria-label="Nova tarefa">' +
@@ -341,26 +352,35 @@ function focusCard() {
     const T = ui.timer, left = timeLeft(), it = timerItem(), c = it ? taskColor(it) : "lilac";
     const feelToday = L(todayKey()).f || [];
     const opts = ["Ansiedade", "Tédio", "Cansaço", "Confusão", "Medo de ficar ruim", "Nada demais"];
+    const brkName = T.long ? "Descanso longo" : "Descanso";
     return '<div class="focus" aria-live="polite" style="border-left:10px solid var(--' + c + '-ink)">' +
-      '<p class="eyebrow">' + (T.phase === "focus" ? "Foco" : "Pausa") + (T.paused ? " · pausado" : "") + "</p>" +
+      '<p class="eyebrow">' + (T.phase === "focus" ? "Foco" : brkName) + (T.paused ? " · pausado" : "") + "</p>" +
       (T.phase === "focus" && it ? '<p class="focus-title" style="font-size:1.4rem">' + esc(it.title) + (metaText(it) ? ' <span class="muted" style="font-size:1rem;font-weight:500">· ' + metaText(it) + "</span>" : "") + "</p>" : "") +
       '<div class="digits" id="digits">' + fmtMs(left) + "</div>" +
       '<div class="bar" id="bar"><i style="width:' + (100 * (1 - left / T.total)).toFixed(2) + '%"></i></div>' +
       (T.phase === "focus" ? '<div><p class="hint" style="margin-bottom:6px">Como você está agora? (opcional) · Espaço pausa e continua</p><div class="feel">' + opts.map(o => '<button data-act="feel2" data-v="' + esc(o) + '" aria-pressed="' + feelToday.includes(o) + '">' + esc(o) + "</button>").join("") + "</div></div>" : '<p class="muted">Levante, beba água, olhe para longe. O celular continua longe.</p>') +
       '<div class="row">' + (T.paused ? '<button class="btn primary" data-act="resume">Continuar</button>' : '<button class="btn" data-act="pause">Pausar</button>') +
-      '<button class="btn" data-act="stop">' + (T.phase === "focus" ? "Encerrar sessão" : "Pular pausa") + "</button></div></div>";
+      '<button class="btn" data-act="stop">' + (T.phase === "focus" ? "Encerrar sessão" : "Pular descanso") + "</button></div></div>";
   }
   if (ui.step === "after") {
-    const t = itemById(ui.lastTask);
-    if (t && !t.done && ui.afterDone === null) {
-      const linked = t.node && node(t.node) && !node(t.node).done;
-      return '<div class="focus"><p class="eyebrow">Sessão concluída</p><p class="focus-title">Você terminou “' + esc(t.title) + '”?</p><div class="row">' +
-        (linked ? '<button class="btn primary" data-act="afteryes" data-node="1">Terminei e concluí a meta “' + esc(node(t.node).title) + '”</button><button class="btn" data-act="afteryes">Terminei a tarefa</button>' : '<button class="btn primary" data-act="afteryes">Terminei</button>') +
-        '<button class="btn" data-act="afterno">Ainda não</button><button class="btn" data-act="extend">Mais 10 min nela</button></div></div>';
+    const t = itemById(ui.lastTask), br = breakInfo(), n = L(todayKey()).s || 0;
+    const brkBtn = '<button class="btn primary" data-act="break">Iniciar descanso' + (br.long ? " longo" : "") + " · " + br.min + " min</button>";
+    if (t && t.done) {
+      return '<div class="focus"><p class="eyebrow">Tarefa concluída</p><p class="focus-title">“' + esc(t.title) + '” concluída. Hora de descansar.</p>' +
+        '<div class="row">' + brkBtn + '<button class="btn" data-act="endday">Agora não</button></div></div>';
     }
-    const left = sortedItems(peekPlan(todayKey())).filter(i => !i.done);
-    return '<div class="focus"><p class="eyebrow">Sessão concluída</p><p class="focus-title">' + (left.length ? "Faça uma pausa e depois toque em Iniciar na próxima tarefa." : "Todas as tarefas do dia estão feitas.") + "</p>" +
-      '<div class="row"><button class="btn primary" data-act="break">Pausa de ' + S.brk + ' min</button><button class="btn" data-act="endday">Fechar</button></div></div>';
+    const linked = t && t.node && node(t.node) && !node(t.node).done;
+    return '<div class="focus"><p class="eyebrow">Tempo! Pomodoro ' + n + " concluído</p>" +
+      '<p class="focus-title">' + (t ? "“" + esc(t.title) + "”" : "Bom trabalho.") + "</p>" +
+      (br.long ? '<p class="muted">Você completou 4 pomodoros: o descanso agora é o longo.</p>' : "") +
+      '<div class="row">' + brkBtn + (t ? '<button class="btn" data-act="afteryes">Concluir</button>' : "") + "</div>" +
+      (linked ? '<div class="row"><button class="btn small ghost" data-act="afteryes" data-node="1">Concluir a tarefa e a meta “' + esc(node(t.node).title) + "”</button></div>" : "") +
+      "</div>";
+  }
+  if (ui.step === "breakend") {
+    const nx = nextItem();
+    return '<div class="focus"><p class="eyebrow">Descanso terminado</p><p class="focus-title">' + (nx ? "Pronto para o próximo pomodoro?" : "Todas as tarefas do dia estão feitas.") + "</p>" +
+      '<div class="row">' + (nx ? '<button class="btn primary" data-act="tstart" data-id="' + nx.id + '">▶ Iniciar “' + esc(nx.title) + "”</button>" : "") + '<button class="btn" data-act="endday">Fechar</button></div></div>';
   }
   return "";
 }
@@ -373,8 +393,10 @@ function taskRow(it, tid, isNext) {
     '<span class="tcolor" aria-hidden="true"></span>' +
     '<div class="tmain"><span class="t">' + esc(it.title) + '</span><span class="tm">' + metaText(it) + "</span></div>" +
     '<div class="tchips">' + (st === "running" ? '<span class="chip">em foco</span>' : "") + (isNext && st === "todo" ? '<span class="chip">próxima</span>' : "") + (it.done ? '<span class="chip mint">concluída</span>' : "") + (it.extra ? '<span class="chip peach">extra</span>' : "") + "</div>" +
-    (it.done ? "" : '<div class="tbtns"><button class="tb play' + (runningNow ? " on" : "") + '" data-act="tstart" data-id="' + it.id + '"' + (runningNow ? " disabled" : "") + ">▶ " + playLabel + "</button>" +
-    '<button class="tb" data-act="tpause" data-id="' + it.id + '"' + (it.paused ? " disabled" : "") + ">❚❚ Pausar</button></div>") +
+    (it.done ? '<div class="tbtns"><button class="tb" data-act="treopen" data-id="' + it.id + '" aria-label="Reiniciar ' + esc(it.title) + '">↺ Reiniciar</button></div>'
+      : '<div class="tbtns"><button class="tb play' + (runningNow ? " on" : "") + '" data-act="tstart" data-id="' + it.id + '"' + (runningNow ? " disabled" : "") + ">▶ " + playLabel + "</button>" +
+        '<button class="tb" data-act="tpause" data-id="' + it.id + '"' + (it.paused ? " disabled" : "") + ">❚❚ Pausar</button>" +
+        (st === "running" ? "" : '<button class="tb" data-act="planrm" data-id="' + it.id + '" aria-label="Remover ' + esc(it.title) + '" title="Remover tarefa">✕</button>') + "</div>") +
     "</li>";
 }
 function planPanel(k) {
@@ -383,11 +405,10 @@ function planPanel(k) {
   const todo = list.filter(i => !i.done && !i.paused), paused = list.filter(i => !i.done && i.paused), done = list.filter(i => i.done);
   const nx = !tid ? nextItem() : null;
   const group = (lab, arr) => arr.length ? '<li class="tgroup">' + lab + " · " + arr.length + "</li>" + arr.map(i => taskRow(i, tid, nx && nx.id === i.id)).join("") : "";
-  return '<div class="panel"><div class="panel-head"><h2>Tarefas do dia</h2><span class="chip mint">' + doneN + " de " + p.items.length + " feitas</span></div>" +
-    '<p class="lockline">Dia iniciado' + (p.lockedAt ? " às " + fmtTime(p.lockedAt) : "") + ".</p>" +
-    '<ul class="tlist">' + group("A fazer", todo) + group("Pausadas", paused) + group("Concluídas", done) + "</ul>" +
-    (ui.extraOpen ? taskForm("extra-in", "Tarefa extra (também não poderá ser removida)", "extra", "extraadd", "Adicionar extra", true) + '<button class="btn small ghost addextra" data-act="extraclose">Cancelar</button>'
-      : '<button class="btn ghost addextra" data-act="extraopen">+ Tarefa extra</button>') +
+  return '<div class="panel"><div class="panel-head"><h2>Tarefas do dia</h2>' + (p.items.length ? '<span class="chip mint">' + doneN + " de " + p.items.length + " feitas</span>" : "") + "</div>" +
+    taskForm("plan-in", "Escreva a tarefa", "plan", "planadd", "Adicionar tarefa", true) +
+    suggestions(k) +
+    (p.items.length ? '<ul class="tlist">' + group("A fazer", todo) + group("Pausadas", paused) + group("Concluídas", done) + "</ul>" : '<p class="hint">Nenhuma tarefa ainda. Escreva a primeira acima e toque em Iniciar para começar um pomodoro.</p>') +
     "</div>";
 }
 function weekStrip(test, color) {
@@ -404,7 +425,7 @@ function prodCard() {
   const tdone = p.items.filter(i => i.done).length, tn = p.items.length, pct = tn ? Math.round(100 * tdone / tn) : 0;
   return '<div class="habit prod">' +
     '<div class="habit-name"><span class="swatch" style="background:var(--lilac-ink)"></span>Produtividade</div>' +
-    '<div class="prod-row"><div class="lab">Tarefas</div>' + (p.locked ? '<div class="progress"><div class="wbar"><i style="width:' + pct + '%;background:var(--lilac-ink)"></i></div><b>' + tdone + "/" + tn + "</b></div>" : '<span class="hint">Dia não iniciado</span>') + "</div>" +
+    '<div class="prod-row"><div class="lab">Tarefas</div>' + (tn ? '<div class="progress"><div class="wbar"><i style="width:' + pct + '%;background:var(--lilac-ink)"></i></div><b>' + tdone + "/" + tn + "</b></div>" : '<span class="hint">Nenhuma tarefa hoje</span>') + "</div>" +
     '<div class="prod-row"><div class="lab">Pomodoros</div><div class="row">' + pips(s, S.goal, S.min) + "<b>" + s + "/" + S.goal + "</b></div></div>" +
     '<div class="hstat"><span><b>' + dailyStreak(focusDone, { skipWeekend: true }) + "</b>dias seguidos</span><span><b>" + bestDaily(focusDone, true) + "</b>recorde</span></div>" +
     weekStrip(focusDone, "lilac") +
@@ -555,7 +576,7 @@ function vSemana() {
       const add = fut ? '<div class="row" style="margin-top:8px"><input type="text" class="grow" id="fut-' + k + '" placeholder="Pré-planejar uma tarefa" aria-label="Pré-planejar tarefa para ' + DOW[i] + '"><button class="btn small" data-act="futadd" data-day="' + k + '">Adicionar</button></div>' : "";
       const bar = (frac, color, lab, val) => '<div class="mini"><div class="mini-top"><span>' + lab + "</span><b>" + val + '</b></div><div class="wbar"><i style="width:' + Math.round(100 * Math.min(1, frac || 0)) + "%;background:var(--" + color + '-ink)"></i></div></div>';
       return '<div class="wrow' + (k === tk ? " today" : "") + (wd ? "" : " weekend") + '">' +
-        '<div class="wday"><b>' + DOW[i] + "</b><span>" + fmtShort(d) + (k === tk ? ' · <span class="chip">hoje</span>' : "") + (p.locked ? ' · <span class="chip mint">dia iniciado</span>' : "") + "</span></div>" +
+        '<div class="wday"><b>' + DOW[i] + "</b><span>" + fmtShort(d) + (k === tk ? ' · <span class="chip">hoje</span>' : "") + "" + "</span></div>" +
         '<div class="wprog">' + bar(n ? dn / n : 0, "sky", "Tarefas", n ? dn + "/" + n : "–") + bar(g ? s / g : (s ? 1 : 0), "lilac", "Pomodoros", wd ? s + "/" + g : (s || "–")) + "</div>" +
         '<div><div class="wcol-label">Hábitos</div><div class="whab">' + state.habits.map(h => '<span class="chip ' + (fut ? "plain" : (hDone(k, h) ? h.color : "plain")) + '">' + (!fut && hDone(k, h) ? "✓ " : "") + esc(h.name) + "</span>").join("") + "</div></div>" +
         '<div class="wplan"><div class="wcol-label">Tarefas do dia</div>' + items + add + "</div>" +
@@ -778,9 +799,12 @@ function vAjustes() {
         (h.kind === "count" ? '<div class="field"><span class="lab">Unidade</span><input type="text" data-field="hunit" data-id="' + h.id + '" value="' + esc(h.unit || "") + '" placeholder="ex.: páginas" aria-label="Unidade"></div>' : "") +
         "</div></div>").join("") + "</div>" +
       '<div class="row"><input type="text" class="grow" id="hab-in" placeholder="Novo hábito: ex. meditar 5 minutos" aria-label="Novo hábito"><button class="btn primary" data-act="hadd">Adicionar hábito</button></div></div>' +
+    '<div class="panel"><h2>Aparência</h2><p class="hint">Tema e cor de destaque. A escolha vai junto com seus dados e vale em todos os aparelhos.</p>' +
+      '<div class="field"><span class="lab">Tema</span><div class="seg" role="group" aria-label="Tema">' + Object.keys(THEME_NAMES).map(t => '<button data-act="theme" data-v="' + t + '" aria-pressed="' + ((THEME_NAMES[S.theme] ? S.theme : "auto") === t) + '">' + THEME_NAMES[t] + "</button>").join("") + "</div></div>" +
+      '<div class="field"><span class="lab">Cor de destaque</span><div class="seg" role="group" aria-label="Cor de destaque">' + ACCENTS.map(c => '<button class="sw" style="background:var(--' + c + ');border-color:var(--' + c + '-ink)" data-act="accent" data-v="' + c + '" aria-pressed="' + ((ACCENTS.includes(S.accent) ? S.accent : "lilac") === c) + '" aria-label="' + COLOR_NAMES[c] + '" title="' + COLOR_NAMES[c] + '"></button>').join("") + "</div></div></div>" +
     '<div class="panel"><h2>Foco e rotina</h2><div class="settings">' +
       '<div class="field"><label for="s-wake">Horário fixo de acordar</label><input id="s-wake" type="time" data-field="set" data-k="wake" value="' + esc(S.wake) + '"></div>' +
-      num("goal", "Meta diária (pomodoros)", 1, 8) + num("min", "Versão mínima (pomodoros)", 1, 4) + num("focus", "Duração do foco (min)", 10, 50) + num("brk", "Duração da pausa (min)", 3, 15) +
+      num("goal", "Meta diária (pomodoros)", 1, 8) + num("min", "Versão mínima (pomodoros)", 1, 4) + num("focus", "Duração do foco (min)", 10, 50) + num("brk", "Descanso curto (min)", 3, 15) + num("long", "Descanso longo, a cada 4 pomodoros (min)", 5, 60) +
     "</div></div>" +
     '<div class="panel"><h2>Base científica</h2><ul class="refs">' +
       "<li>Steel (2007), meta-análise sobre a natureza da procrastinação.</li>" +
@@ -814,8 +838,8 @@ function updatePill() {
   pill.hidden = false;
   pill.classList.toggle("paused", !!t.paused);
   const it = timerItem();
-  $("#timer-pill-t").textContent = fmtMs(timeLeft()) + (t.phase === "break" ? " · pausa" : (t.paused ? " · pausado" : ""));
-  pill.title = (t.phase === "focus" ? "Foco" : "Pausa") + (it ? ": " + it.title : "") + ". Toque para voltar ao Hoje.";
+  $("#timer-pill-t").textContent = fmtMs(timeLeft()) + (t.phase === "break" ? (t.long ? " · descanso longo" : " · descanso") : (t.paused ? " · pausado" : ""));
+  pill.title = (t.phase === "focus" ? "Foco" : "Descanso") + (it ? ": " + it.title : "") + ". Toque para voltar ao Hoje.";
 }
 function render() {
   $("#app").innerHTML = VIEWS[ui.view]();
@@ -854,6 +878,7 @@ function addPlanItem(k, title, nodeId, extra, color) {
 function focusSoon(sel) { setTimeout(() => { const el = $(sel); if (el) el.focus(); }, 0); }
 
 /* ---------- events ---------- */
+document.addEventListener("pointerdown", () => primeAudio(), { passive: true });
 document.addEventListener("click", e => {
   if (!state) return;
   const b = e.target.closest("[data-act]"); if (!b) return;
@@ -865,14 +890,15 @@ document.addEventListener("click", e => {
     case "planadd": { const inp = $("#plan-in"), sel = $('[data-field="plannode"][data-for="plan"]'); const it = addPlanItem(tk, inp.value, sel ? sel.value : "", false, ui.newColor); if (!it) break; ui.newPlanNode = ""; ui.newColor = ""; save(); render(); focusSoon("#plan-in"); break; }
     case "planaddnode": { const n = node(id); if (!n) break; addPlanItem(tk, n.title, id); save(); render(); break; }
     case "planaddpend": { const pp = state.days[b.dataset.day]; const src = pp && pp.items.find(x => x.id === id); if (!src) break; const ni = addPlanItem(tk, src.title, src.node, false, src.color); if (ni) ni.rc = src.rc || ni.rc; save(); render(); break; }
-    case "planrm": { const p = dayPlan(tk); if (p.locked) break; p.items = p.items.filter(i => i.id !== id); save(); render(); break; }
-    case "planlockask": ui.lockConfirm = true; render(); break;
-    case "planlockcancel": ui.lockConfirm = false; render(); break;
-    case "extraopen": ui.extraOpen = true; render(); focusSoon("#extra-in"); break;
-    case "extraclose": ui.extraOpen = false; ui.newColor = ""; render(); break;
+    case "planrm": { const p = dayPlan(tk); if (ui.timer && ui.timer.taskId === id) break; p.items = p.items.filter(i => i.id !== id); if (p.next === id) p.next = null; save(); render(); toast("Tarefa removida."); break; }
+    case "treopen": {
+      const p = dayPlan(tk), it = p.items.find(i => i.id === id); if (!it || !it.done) break;
+      it.done = false; it.doneAt = null; it.paused = false; it.pausedAt = null;
+      if (it.nodeDone && it.node && node(it.node)) { node(it.node).done = false; node(it.node).doneAt = null; }
+      delete it.nodeDone; p.next = id;
+      save(); render(); toast("Tarefa reiniciada. Ela voltou para A fazer."); break;
+    }
     case "pmenu": ui.pMenu = ui.pMenu === id ? null : id; render(); break;
-    case "planlock": { ui.lockConfirm = false; const p = dayPlan(tk); if (!p.items.length) break; p.locked = true; p.lockedAt = Date.now(); p.next = p.items[0].id; save(); render(); toast("Dia iniciado. Uma tarefa de cada vez."); break; }
-    case "extraadd": { const inp = $("#extra-in"), sel = $('[data-field="plannode"][data-for="extra"]'); const it = addPlanItem(tk, inp.value, sel ? sel.value : "", true, ui.newColor); if (!it) break; ui.newColor = ""; ui.extraOpen = false; save(); render(); toast("Extra adicionada à lista."); break; }
     case "itemdone": {
       const p = dayPlan(tk), it = p.items.find(i => i.id === id); if (!it) break;
       it.done = !it.done; it.doneAt = it.done ? Date.now() : null; it.paused = false; it.pausedAt = null;
@@ -917,14 +943,18 @@ document.addEventListener("click", e => {
       render(); break;
     }
     case "stop": finishTimer(true); break;
-    case "extend": primeAudio(); startTimer("focus", 10, ui.lastTask); break;
     case "afteryes": {
       const t = itemById(ui.lastTask) || nextItem();
-      if (t) { t.done = true; t.paused = false; t.doneAt = Date.now(); if (b.dataset.node && t.node && node(t.node)) { node(t.node).done = true; node(t.node).doneAt = Date.now(); toast("Meta concluída. Um degrau a mais."); } const p = dayPlan(tk); const nx = sortedItems(p).find(i => !i.done && !i.paused); p.next = nx ? nx.id : null; save(); }
+      if (t) {
+        t.done = true; t.paused = false; t.pausedAt = null; t.doneAt = Date.now();
+        if (b.dataset.node && t.node && node(t.node) && !node(t.node).done) { node(t.node).done = true; node(t.node).doneAt = Date.now(); t.nodeDone = true; toast("Tarefa e meta concluídas. Um degrau a mais."); }
+        else toast("Tarefa concluída.");
+        const p = dayPlan(tk); const nx = sortedItems(p).find(i => !i.done && !i.paused); p.next = nx ? nx.id : null; save();
+      }
       ui.afterDone = true; render(); break;
     }
     case "afterno": ui.afterDone = false; render(); break;
-    case "break": primeAudio(); ui.afterDone = null; startTimer("break", S.brk); break;
+    case "break": { primeAudio(); ui.afterDone = null; const br = breakInfo(); startTimer("break", br.min, null, br.long); break; }
     case "endday": ui.step = null; ui.afterDone = null; render(); toast("Bom trabalho. Até a próxima sessão."); break;
     case "swap": ui.swap = !ui.swap; render(); break;
     case "setnext": dayPlan(tk).next = id; ui.swap = false; save(); render(); break;
@@ -944,7 +974,7 @@ document.addEventListener("click", e => {
     case "nodeundo": { const n = node(id); if (n) { n.done = false; n.doneAt = null; save(); render(); } break; }
     case "nodetoday": {
       const n = node(id); if (!n) break; const p = dayPlan(tk);
-      addPlanItem(tk, n.title, id, p.locked); save(); toast(p.locked ? "Adicionada ao plano de hoje como extra." : "Adicionada ao plano de hoje."); break;
+      addPlanItem(tk, n.title, id, false); save(); toast("Adicionada ao plano de hoje."); break;
     }
     case "branch": ui.branch = id; render(); focusSoon("#br-" + id); break;
     case "branchcancel": ui.branch = null; render(); break;
@@ -983,8 +1013,8 @@ document.addEventListener("click", e => {
     case "pmove": { const i = state.plans.findIndex(x => x.id === id), j = i + Number(b.dataset.d); if (i < 0 || j < 0 || j >= state.plans.length) break; const tmp = state.plans[i]; state.plans[i] = state.plans[j]; state.plans[j] = tmp; save(); render(); break; }
     case "pendtoday": {
       const pp = state.days[b.dataset.day], src = pp && pp.items.find(x => x.id === id); if (!src) break;
-      const p = dayPlan(tk); addPlanItem(tk, src.title, src.node, p.locked); src.moved = true; save(); render();
-      toast(p.locked ? "Levada para hoje como extra." : "Levada para as tarefas de hoje."); break;
+      const p = dayPlan(tk); addPlanItem(tk, src.title, src.node, false); src.moved = true; save(); render();
+      toast("Levada para as tarefas de hoje."); break;
     }
     case "pdel": ui.pDel = id; render(); break;
     case "pdelcancel": ui.pDel = null; render(); break;
@@ -1009,6 +1039,8 @@ document.addEventListener("click", e => {
       catch (err) { toast("Esse texto não é um backup válido. Copie de novo pelo botão “Copiar backup”."); }
       break;
     }
+    case "theme": S.theme = b.dataset.v; save(); applyTheme(); render(); break;
+    case "accent": S.accent = b.dataset.v; save(); applyTheme(); render(); break;
     case "wipe": ui.wipe = !ui.wipe; render(); break;
     case "wipeok": { const fresh = defaults(); fresh.goals = { nodes: {}, roots: [] }; state = fresh; ui.wipe = false; save(); render(); toast("Tudo apagado."); break; }
   }
@@ -1084,7 +1116,7 @@ document.addEventListener("change", e => {
     const k = el.dataset.k;
     if (k === "wake") { if (el.value) S.wake = el.value; }
     else {
-      const lim = { goal: [1, 8], min: [1, 4], focus: [10, 50], brk: [3, 15] }[k];
+      const lim = { goal: [1, 8], min: [1, 4], focus: [10, 50], brk: [3, 15], long: [5, 60] }[k];
       let v = Math.round(Number(el.value)); if (!isFinite(v)) v = S[k];
       S[k] = Math.min(lim[1], Math.max(lim[0], v));
       if (S.min > S.goal) S.min = S.goal;
@@ -1111,6 +1143,7 @@ export function startApp(c) {
     navigator.storage.persist().then(ok => { ui.persisted = !!ok; }).catch(() => {});
   }
   state = c.initialState ? migrate(clone(c.initialState)) : defaults();
+  applyTheme();
   const v = location.hash.slice(1);
   ui.view = VIEWS[ALIAS[v] || v] ? (ALIAS[v] || v) : "hoje";
   render();
