@@ -462,14 +462,24 @@ function focusCard() {
     buttons: '<button class="btn primary" data-act="tstart" data-id="' + (nx ? nx.id : "") + '"' + (nx ? "" : " disabled") + ">▶ Iniciar</button>"
   });
 }
+function taskEditRow(it) {
+  const c = taskColor(it), ol = undoneNodes();
+  if (it.node && node(it.node) && !ol.includes(it.node)) ol.unshift(it.node);
+  return '<li class="trow editing" style="--tc:var(--' + c + ');--tci:var(--' + c + '-ink)"><span class="tcolor" aria-hidden="true"></span>' +
+    '<div class="tedit"><input type="text" id="te-' + it.id + '" value="' + esc(it.title) + '" aria-label="Nome da tarefa" maxlength="200">' +
+    '<div class="metarow"><label for="tm-' + it.id + '">Meta</label><select id="tm-' + it.id + '"><option value="">Tarefa livre</option>' +
+      ol.map(id => '<option value="' + id + '"' + (it.node === id ? " selected" : "") + ">" + esc(node(id).title) + " · " + esc((rootOf(id) || {}).title || "") + "</option>").join("") + "</select></div>" +
+    '<div class="row"><button class="btn small primary" data-act="teditok" data-id="' + it.id + '">Salvar</button><button class="btn small ghost" data-act="teditcancel">Cancelar</button></div></div></li>';
+}
 function taskRow(it, tid, isNext) {
+  if (ui.editTask === it.id) return taskEditRow(it);
   const c = taskColor(it);
   const st = it.done ? "done" : (it.id === tid && !it.paused ? "running" : (it.paused ? "paused" : "todo"));
   const runningNow = st === "running" && ui.timer && !ui.timer.paused;
   const playLabel = it.paused && tid === it.id ? "Retomar" : (runningNow ? "Em foco" : "Iniciar");
   return '<li class="trow ' + st + (isNext && st === "todo" ? " next" : "") + '" style="--tc:var(--' + c + ');--tci:var(--' + c + '-ink)">' +
     '<span class="tcolor" aria-hidden="true"></span>' +
-    '<div class="tmain"><span class="t">' + esc(it.title) + '</span><span class="tm">' + metaText(it) + "</span></div>" +
+    '<div class="tmain editable" data-act="tedit" data-id="' + it.id + '" role="button" tabindex="0" aria-label="Editar tarefa: ' + esc(it.title) + '" title="Clique para editar"><span class="t">' + esc(it.title) + '</span><span class="tm">' + metaText(it) + "</span></div>" +
     '<div class="tchips">' + (st === "running" ? '<span class="chip">em foco</span>' : "") + (isNext && st === "todo" ? '<span class="chip">próxima</span>' : "") + (it.done ? '<span class="chip mint">concluída</span>' : "") + (it.extra ? '<span class="chip peach">extra</span>' : "") + "</div>" +
     (it.done ? '<div class="tbtns"><button class="tb" data-act="treopen" data-id="' + it.id + '" aria-label="Reiniciar ' + esc(it.title) + '">↺ Reiniciar</button></div>'
       : '<div class="tbtns"><button class="tb play' + (runningNow ? " on" : "") + '" data-act="tstart" data-id="' + it.id + '"' + (runningNow ? " disabled" : "") + ">▶ " + playLabel + "</button>" +
@@ -983,6 +993,16 @@ document.addEventListener("click", e => {
     case "planaddnode": { const n = node(id); if (!n) break; addPlanItem(tk, n.title, id); save(); render(); break; }
     case "planaddpend": { const pp = state.days[b.dataset.day]; const src = pp && pp.items.find(x => x.id === id); if (!src) break; const ni = addPlanItem(tk, src.title, src.node, false, src.color); if (ni) ni.rc = src.rc || ni.rc; save(); render(); break; }
     case "planrm": { const p = dayPlan(tk); if (ui.timer && ui.timer.taskId === id) break; p.items = p.items.filter(i => i.id !== id); if (p.next === id) p.next = null; save(); render(); toast("Tarefa removida."); break; }
+    case "tedit": ui.editTask = id; render(); focusSoon("#te-" + id); break;
+    case "teditcancel": ui.editTask = null; render(); break;
+    case "teditok": {
+      const it = itemById(id), inp = $("#te-" + id), sel = $("#tm-" + id);
+      if (!it || !inp) { ui.editTask = null; render(); break; }
+      const v = inp.value.trim(); if (!v) { toast("Escreva o nome da tarefa."); inp.focus(); break; }
+      it.title = v;
+      if (sel) { if (sel.value && node(sel.value)) it.node = sel.value; else delete it.node; }
+      ui.editTask = null; save(); render(); toast("Tarefa atualizada."); break;
+    }
     case "treopen": {
       const p = dayPlan(tk), it = p.items.find(i => i.id === id); if (!it || !it.done) break;
       it.done = false; it.doneAt = null; it.paused = false; it.pausedAt = null;
@@ -1151,6 +1171,9 @@ document.addEventListener("toggle", e => { if (e.target.classList && e.target.cl
 document.addEventListener("keydown", e => {
   if (!state) return;
   const t = e.target;
+  if (e.key === "Enter" && t.dataset && t.dataset.act === "tedit") { e.preventDefault(); t.click(); return; }
+  if (e.key === "Enter" && t.id && t.id.startsWith("te-")) { e.preventDefault(); const ok = document.querySelector('[data-act="teditok"]'); if (ok) ok.click(); return; }
+  if (e.key === "Escape" && ui.editTask) { ui.editTask = null; render(); return; }
   if (e.key === "Escape") { if (ui.pMenu || ui.lockConfirm || ui.extraOpen || ui.sel) { ui.pMenu = null; ui.lockConfirm = false; ui.extraOpen = false; ui.sel = null; ui.branch = null; render(); } return; }
   if (e.key === " " && ui.timer && !/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName) && !(t.classList && t.classList.contains("node"))) {
     e.preventDefault(); const b = document.querySelector(ui.timer.paused ? '[data-act="resume"]' : '[data-act="pause"]');

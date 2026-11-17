@@ -522,3 +522,11 @@ code{font-family:var(--f-mono);font-size:.85em;background:var(--paper);padding:1
 .agmain .t a:hover{text-decoration:underline}
 .agmain .tm{font-size:.82rem;color:var(--muted);overflow-wrap:anywhere}
 @media (max-width:640px){.agrow{grid-template-columns:auto 1fr}.agrow .chip{justify-self:start;grid-column:2}}
+/* ===== Editar tarefa ===== */
+.tmain.editable{cursor:pointer;border-radius:8px}
+.tmain.editable:hover .t{text-decoration:underline;text-decoration-style:dotted}
+.trow.editing{grid-template-columns:6px 1fr}
+.tedit{display:grid;gap:8px;min-width:0}
+.tedit input[type="text"],.tedit select{width:100%;min-height:44px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:8px 12px}
+.tedit .metarow{display:grid;gap:4px}
+.tedit .metarow label{font-size:.8rem;color:var(--muted);font-weight:600}
