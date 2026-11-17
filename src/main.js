@@ -39,6 +39,7 @@ function showLogin(message) {
         : '<div class="banner"><b>Login com Google ainda não configurado.</b> Coloque o ID do cliente OAuth em <code>src/config.js</code> (passo a passo no README).</div>') +
       (message ? '<p class="login-error" role="alert">' + esc(message) + "</p>" : "") +
       '<button class="btn ghost" id="login-local">Usar sem conta neste aparelho</button>' +
+      '<p class="hint"><a href="privacidade.html">Política de Privacidade</a></p>' +
     "</section>";
   const g = $("#login-google");
   if (g) g.addEventListener("click", () => signIn());

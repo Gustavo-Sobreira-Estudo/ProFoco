@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de Privacidade | ProFoco</title>
+<meta name="description" content="Como o ProFoco trata os seus dados: eles ficam só no seu aparelho e na pasta oculta do seu Google Drive.">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<style>
+  :root { --paper:#f6f4fb; --surface:#fff; --ink:#2a2740; --muted:#6c6886; --line:#e4dff0; --accent:#5b4fc4; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font:1rem/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:32px 16px 64px; }
+  article { background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:28px 24px; }
+  h1 { margin:0 0 4px; font-size:1.8rem; line-height:1.2; }
+  h2 { margin:28px 0 6px; font-size:1.15rem; }
+  p, li { margin:6px 0; }
+  .muted { color:var(--muted); font-size:.92rem; }
+  a { color:var(--accent); }
+  a:focus-visible { outline:3px solid var(--accent); outline-offset:2px; border-radius:4px; }
+  code { background:var(--paper); padding:1px 6px; border-radius:6px; }
+</style>
+</head>
+<body>
+<main>
+<article>
+  <p><a href="./">← Voltar ao ProFoco</a></p>
+  <h1>Política de Privacidade</h1>
+  <p class="muted">ProFoco · Última atualização: 17 de novembro de 2026</p>
+
+  <p>O ProFoco é um aplicativo gratuito de planejamento e foco contra a procrastinação. Esta página explica, de forma direta, quais dados ele usa e onde eles ficam.</p>
+
+  <h2>Quem somos</h2>
+  <p>O ProFoco é um projeto pessoal de código aberto, mantido por uma pessoa física, com o código aberto em <a href="https://github.com/Gustavo-Sobreira-Estudo/ProFoco">github.com/Gustavo-Sobreira-Estudo/ProFoco</a>. Não existe empresa, servidor ou banco de dados por trás do aplicativo.</p>
+
+  <h2>Quais dados o ProFoco usa</h2>
+  <ul>
+    <li><b>Dados que você cria no app:</b> objetivos, tarefas do dia, hábitos, planos se–então, registros de sessões de foco e revisões semanais.</li>
+    <li><b>Dados do seu perfil Google</b> (só se você entrar com o Google): nome, endereço de e-mail e foto. Eles são exibidos na tela de Ajustes para você saber qual conta está conectada.</li>
+  </ul>
+
+  <h2>Onde os dados ficam</h2>
+  <ul>
+    <li><b>No seu aparelho:</b> uma cópia fica no armazenamento do navegador (<code>localStorage</code>), para o app funcionar offline.</li>
+    <li><b>No seu Google Drive:</b> se você entrar com o Google, os dados são salvos no arquivo <code>profoco-data.json</code>, dentro da pasta oculta do aplicativo (<code>appDataFolder</code>). Só o ProFoco acessa essa pasta, e o arquivo não aparece na sua lista de arquivos do Drive.</li>
+    <li><b>Não existe servidor do ProFoco.</b> Os dados vão direto do seu navegador para o seu Google Drive. Quem mantém o projeto não recebe, vê nem armazena nenhum dado seu.</li>
+  </ul>
+
+  <h2>Permissões pedidas ao Google</h2>
+  <ul>
+    <li><code>openid</code>, <code>email</code> e <code>profile</code>: identificar a sua conta e mostrar nome, e-mail e foto.</li>
+    <li><code>drive.appdata</code>: criar e ler o arquivo do ProFoco na pasta oculta do aplicativo. Essa permissão <b>não dá acesso</b> aos seus outros arquivos do Drive.</li>
+  </ul>
+  <p>O uso das informações recebidas das APIs do Google segue a <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de Uso Limitado.</p>
+
+  <h2>Compartilhamento</h2>
+  <p>Os seus dados <b>não são vendidos, compartilhados, usados para publicidade nem para treinar modelos</b>. Não há rastreadores, analytics ou cookies de terceiros no aplicativo.</p>
+
+  <h2>Seus controles</h2>
+  <ul>
+    <li><b>Apagar os dados do aparelho:</b> em Ajustes, use “Apagar tudo”, ou limpe os dados do site nas configurações do navegador.</li>
+    <li><b>Apagar os dados do Drive:</b> em <a href="https://drive.google.com/drive/u/0/settings">Configurações do Drive</a> › Gerenciar aplicativos › ProFoco › “Excluir dados ocultos do aplicativo”.</li>
+    <li><b>Revogar o acesso:</b> em <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>, remova o ProFoco.</li>
+    <li><b>Backup:</b> em Ajustes você pode baixar uma cópia dos seus dados em arquivo.</li>
+  </ul>
+
+  <h2>Crianças</h2>
+  <p>O ProFoco não é direcionado a menores de 13 anos e não coleta dados de ninguém de forma ativa.</p>
+
+  <h2>Mudanças nesta política</h2>
+  <p>Se algo mudar, esta página será atualizada com a nova data no topo.</p>
+
+  <h2>Contato</h2>
+  <p>Dúvidas ou pedidos: abra uma conversa em <a href="https://github.com/Gustavo-Sobreira-Estudo/ProFoco/issues">github.com/Gustavo-Sobreira-Estudo/ProFoco/issues</a>.</p>
+</article>
+</main>
+</body>
+</html>
