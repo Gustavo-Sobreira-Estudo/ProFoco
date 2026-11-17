@@ -5,7 +5,7 @@ export const GOOGLE_CLIENT_ID = "898513177063-adtf14hd7re5vi4sl6cphom7cdhu2a44.a
 
 // Chave Pix para apoio voluntário (e-mail, telefone, CPF/CNPJ ou chave aleatória).
 // Deixe vazio ("") para esconder os avisos de apoio. Atenção: o repositório é público, então esta chave também fica pública.
-export const PIX_KEY = "";
+export const PIX_KEY = "52f372e5-8e7a-4682-9cc4-13976c74a847";
 
 // Nome do arquivo salvo na pasta oculta do app (appDataFolder) no Google Drive de cada usuário.
 export const DATA_FILE = "profoco-data.json";
