@@ -1,6 +1,6 @@
 // Service worker do ProFoco: deixa o app abrir offline (instalável como PWA).
 // Ao mudar qualquer arquivo do app, aumente CACHE para forçar a atualização.
-const CACHE = "profoco-v12";
+const CACHE = "profoco-v13";
 const SHELL = [
   "./",
   "./index.html",

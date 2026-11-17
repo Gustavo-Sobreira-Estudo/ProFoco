@@ -961,6 +961,16 @@ function focusSoon(sel) { setTimeout(() => { const el = $(sel); if (el) el.focus
 
 /* ---------- events ---------- */
 document.addEventListener("pointerdown", () => primeAudio(), { passive: true });
+/* Objetivos: clicar fora do galho selecionado recolhe as opções (sem perder o que foi digitado em "Novo objetivo" nem a rolagem da árvore). */
+document.addEventListener("click", e => {
+  if (!state || ui.view !== "objetivos" || !ui.sel) return;
+  if (e.target.closest(".node.sel, button, a, input, select, textarea, label, summary, [data-act]")) return;
+  const g = $("#goal-in"), typed = g ? g.value : "", scrolls = [...document.querySelectorAll(".tree-scroll")].map(x => x.scrollLeft);
+  ui.sel = null; ui.edit = null; ui.branch = null; ui.confirmDel = null;
+  render();
+  const g2 = $("#goal-in"); if (g2 && typed) g2.value = typed;
+  document.querySelectorAll(".tree-scroll").forEach((x, i) => { x.scrollLeft = scrolls[i] || 0; });
+});
 document.addEventListener("click", e => {
   if (!state) return;
   const b = e.target.closest("[data-act]"); if (!b) return;
