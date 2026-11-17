@@ -498,3 +498,11 @@ code{font-family:var(--f-mono);font-size:.85em;background:var(--paper);padding:1
 .seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .seg .sw{width:44px;height:44px;padding:0;border-width:2px}
 .seg .sw[aria-pressed="true"]{outline:3px solid var(--ink);outline-offset:2px}
+/* ===== Card de foco com altura estável ===== */
+.focus.shell{gap:14px}
+.ftitle{font-family:var(--f-display);font-size:clamp(1.25rem,2.8vw,1.75rem);font-weight:700;line-height:1.2;text-wrap:balance;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:1.2em}
+.fmeta{font-size:1rem;font-weight:500}
+.focus .xtra{min-height:96px;align-content:start;display:grid;gap:8px}
+.focus .xtra .btn.small{justify-self:start}
+.daysum{min-height:1.5em}
+@media (max-width:640px){.focus .xtra{min-height:132px}}

@@ -120,7 +120,7 @@ function dayPlan(k) { if (!state.days[k]) state.days[k] = { locked: false, items
 const goalOf = k => L(k).g || state.settings.goal;
 function sortedItems(p) {
   const tid = ui.timer && ui.timer.phase === "focus" ? ui.timer.taskId : null;
-  const rank = it => it.done ? 3 : (it.paused ? 2 : (it.id === tid ? 0 : 1));
+  const rank = it => it.done ? 3 : (it.paused ? 2 : 1);
   return p.items.map((it, i) => ({ it, i })).sort((a, b) => {
     const ra = rank(a.it), rb = rank(b.it); if (ra !== rb) return ra - rb;
     if (ra === 3) return (a.it.doneAt || 0) - (b.it.doneAt || 0);
@@ -310,13 +310,12 @@ function vHoje() {
   if (allTasksDone(k)) banner = '<div class="banner mint"><b>Todas as tarefas do dia estão concluídas.</b> O resto do dia é seu.</div>';
   else if (tn > 0 && done === 0 && pk >= state.createdDay && (L(pk).s || 0) === 0 && Object.keys(state.log).some(x => x < k))
     banner = '<div class="banner"><b>Ontem não teve sessão.</b> Acontece, e um dia perdido não desfaz o hábito. Hoje vale a versão mínima: ' + plural(S.min, "pomodoro") + ".</div>";
-  else if (done >= S.goal && !ui.timer) banner = '<div class="banner mint"><b>Meta de pomodoros cumprida.</b> Se parar agora, a próxima largada fica mais fácil.</div>';
+  else if (done >= S.goal) banner = '<div class="banner mint"><b>Meta de pomodoros cumprida.</b> Se parar agora, a próxima largada fica mais fácil.</div>';
   const pinned = state.plans.filter(p => p.active && p.pinned);
   return '<section class="view">' +
     '<div class="head"><div><p class="eyebrow">' + esc(fmtLong.format(now)) + '</p><h1>Hoje</h1></div>' +
-    (tn ? '<p class="daysum"><b>' + td + "/" + tn + "</b> tarefas · <b>" + done + "/" + S.goal + "</b> pomodoros</p>" : "") + "</div>" +
-    banner +
-    focusCard() + planPanel(k) +
+    '<p class="daysum"><b>' + td + "/" + tn + "</b> tarefas · <b>" + done + "/" + S.goal + "</b> pomodoros</p></div>" +
+    focusCard() + planPanel(k) + banner +
     habitsPanel() +
     (pinned.length ? '<div class="panel"><div class="panel-head"><h2>Se–então em destaque</h2><button class="btn small ghost" data-act="nav" data-v="seentao">Ver todos</button></div><ul class="plans-list">' +
       pinned.map(p => '<li style="background:var(--' + (PCAT_COLOR[p.cat] || "sky") + ')"><span><b>' + esc(p.a) + ",</b> " + esc(p.b) + '.</span><button class="btn small" data-act="puse" data-id="' + p.id + '">Usei</button></li>').join("") +
@@ -346,6 +345,16 @@ function colorPicker(sel) {
   return '<div class="cpick" role="group" aria-label="Cor da tarefa"><span class="lab">Cor</span><button class="auto" data-act="newcolor" data-c="" aria-pressed="' + !sel + '" title="Automática: cor do objetivo ou aleatória">Auto</button>' +
     COLORS.map(c => '<button class="sw" style="background:var(--' + c + ');border-color:var(--' + c + '-ink)" data-act="newcolor" data-c="' + c + '" aria-pressed="' + (sel === c) + '" aria-label="' + COLOR_NAMES[c] + '" title="' + COLOR_NAMES[c] + '"></button>').join("") + "</div>";
 }
+/* Card de foco: estrutura fixa (título, relógio, barra, bloco de apoio, botões) em todos os estados, para o layout não pular. */
+function focusShell({ eyebrow, title, digits, pct, extra, buttons, color, live }) {
+  return '<div class="focus shell"' + (live ? ' aria-live="polite"' : "") + ' style="border-left:10px solid var(--' + (color || "lilac") + '-ink)">' +
+    '<p class="eyebrow">' + eyebrow + "</p>" +
+    '<p class="ftitle">' + (title || "&nbsp;") + "</p>" +
+    '<div class="digits" id="digits">' + digits + "</div>" +
+    '<div class="bar" id="bar"><i style="width:' + pct.toFixed(2) + '%"></i></div>' +
+    '<div class="xtra">' + (extra || "") + "</div>" +
+    '<div class="row">' + buttons + "</div></div>";
+}
 function focusCard() {
   const S = state.settings;
   if (ui.step === "running" && ui.timer) {
@@ -353,36 +362,38 @@ function focusCard() {
     const feelToday = L(todayKey()).f || [];
     const opts = ["Ansiedade", "Tédio", "Cansaço", "Confusão", "Medo de ficar ruim", "Nada demais"];
     const brkName = T.long ? "Descanso longo" : "Descanso";
-    return '<div class="focus" aria-live="polite" style="border-left:10px solid var(--' + c + '-ink)">' +
-      '<p class="eyebrow">' + (T.phase === "focus" ? "Foco" : brkName) + (T.paused ? " · pausado" : "") + "</p>" +
-      (T.phase === "focus" && it ? '<p class="focus-title" style="font-size:1.4rem">' + esc(it.title) + (metaText(it) ? ' <span class="muted" style="font-size:1rem;font-weight:500">· ' + metaText(it) + "</span>" : "") + "</p>" : "") +
-      '<div class="digits" id="digits">' + fmtMs(left) + "</div>" +
-      '<div class="bar" id="bar"><i style="width:' + (100 * (1 - left / T.total)).toFixed(2) + '%"></i></div>' +
-      (T.phase === "focus" ? '<div><p class="hint" style="margin-bottom:6px">Como você está agora? (opcional) · Espaço pausa e continua</p><div class="feel">' + opts.map(o => '<button data-act="feel2" data-v="' + esc(o) + '" aria-pressed="' + feelToday.includes(o) + '">' + esc(o) + "</button>").join("") + "</div></div>" : '<p class="muted">Levante, beba água, olhe para longe. O celular continua longe.</p>') +
-      '<div class="row">' + (T.paused ? '<button class="btn primary" data-act="resume">Continuar</button>' : '<button class="btn" data-act="pause">Pausar</button>') +
-      '<button class="btn" data-act="stop">' + (T.phase === "focus" ? "Encerrar sessão" : "Pular descanso") + "</button></div></div>";
+    return focusShell({
+      live: true, color: c, pct: 100 * (1 - left / T.total), digits: fmtMs(left),
+      eyebrow: (T.phase === "focus" ? "Foco" : brkName) + (T.paused ? " · pausado" : ""),
+      title: T.phase === "focus" && it ? esc(it.title) + (metaText(it) ? ' <span class="muted fmeta">· ' + metaText(it) + "</span>" : "") : (T.phase === "break" ? "Hora de descansar" : ""),
+      extra: T.phase === "focus" ? '<p class="hint" style="margin-bottom:6px">Como você está agora? (opcional) · Espaço pausa e continua</p><div class="feel">' + opts.map(o => '<button data-act="feel2" data-v="' + esc(o) + '" aria-pressed="' + feelToday.includes(o) + '">' + esc(o) + "</button>").join("") + "</div>" : '<p class="muted">Levante, beba água, olhe para longe. O celular continua longe.</p>',
+      buttons: (T.paused ? '<button class="btn primary" data-act="resume">Continuar</button>' : '<button class="btn" data-act="pause">Pausar</button>') +
+        '<button class="btn" data-act="stop">' + (T.phase === "focus" ? "Encerrar sessão" : "Pular descanso") + "</button>"
+    });
   }
   if (ui.step === "after") {
-    const t = itemById(ui.lastTask), br = breakInfo(), n = L(todayKey()).s || 0;
+    const t = itemById(ui.lastTask), br = breakInfo(), n = L(todayKey()).s || 0, c = t ? taskColor(t) : "lilac";
     const brkBtn = '<button class="btn primary" data-act="break">Iniciar descanso' + (br.long ? " longo" : "") + " · " + br.min + " min</button>";
     if (t && t.done) {
-      return '<div class="focus"><p class="eyebrow">Tarefa concluída</p><p class="focus-title">“' + esc(t.title) + '” concluída. Hora de descansar.</p>' +
-        '<div class="row">' + brkBtn + '<button class="btn" data-act="endday">Agora não</button></div></div>';
+      return focusShell({ live: true, color: c, pct: 100, digits: "00:00", eyebrow: "Tarefa concluída", title: "“" + esc(t.title) + "” concluída",
+        extra: '<p class="muted">Hora de descansar.</p>', buttons: brkBtn + '<button class="btn" data-act="endday">Agora não</button>' });
     }
     const linked = t && t.node && node(t.node) && !node(t.node).done;
-    return '<div class="focus"><p class="eyebrow">Tempo! Pomodoro ' + n + " concluído</p>" +
-      '<p class="focus-title">' + (t ? "“" + esc(t.title) + "”" : "Bom trabalho.") + "</p>" +
-      (br.long ? '<p class="muted">Você completou 4 pomodoros: o descanso agora é o longo.</p>' : "") +
-      '<div class="row">' + brkBtn + (t ? '<button class="btn" data-act="afteryes">Concluir</button>' : "") + "</div>" +
-      (linked ? '<div class="row"><button class="btn small ghost" data-act="afteryes" data-node="1">Concluir a tarefa e a meta “' + esc(node(t.node).title) + "”</button></div>" : "") +
-      "</div>";
+    return focusShell({ live: true, color: c, pct: 100, digits: "00:00", eyebrow: "Tempo! Pomodoro " + n + " concluído",
+      title: t ? "“" + esc(t.title) + "”" : "Bom trabalho.",
+      extra: (br.long ? '<p class="muted">Você completou 4 pomodoros: o descanso agora é o longo.</p>' : '<p class="muted">Descanse agora ou conclua a tarefa, se ela terminou.</p>') +
+        (linked ? '<button class="btn small ghost" data-act="afteryes" data-node="1">Concluir a tarefa e a meta “' + esc(node(t.node).title) + "”</button>" : ""),
+      buttons: brkBtn + (t ? '<button class="btn" data-act="afteryes">Concluir</button>' : "") });
   }
-  if (ui.step === "breakend") {
-    const nx = nextItem();
-    return '<div class="focus"><p class="eyebrow">Descanso terminado</p><p class="focus-title">' + (nx ? "Pronto para o próximo pomodoro?" : "Todas as tarefas do dia estão feitas.") + "</p>" +
-      '<div class="row">' + (nx ? '<button class="btn primary" data-act="tstart" data-id="' + nx.id + '">▶ Iniciar “' + esc(nx.title) + "”</button>" : "") + '<button class="btn" data-act="endday">Fechar</button></div></div>';
-  }
-  return "";
+  /* Pronto para começar: sem timer rodando, o relógio já aparece e a pessoa só toca em Iniciar. */
+  const nx = nextItem(), fromBreak = ui.step === "breakend";
+  return focusShell({
+    color: nx ? taskColor(nx) : "lilac", pct: 0, digits: fmtMs(S.focus * 60000),
+    eyebrow: fromBreak ? "Descanso terminado" : "Pronto para começar",
+    title: nx ? esc(nx.title) + (metaText(nx) ? ' <span class="muted fmeta">· ' + metaText(nx) + "</span>" : "") : "Nenhuma tarefa pendente",
+    extra: '<p class="muted">' + (nx ? "Toque em Iniciar quando estiver pronto. São " + S.focus + " minutos de foco." : "Escreva uma tarefa abaixo para começar.") + "</p>",
+    buttons: '<button class="btn primary" data-act="tstart" data-id="' + (nx ? nx.id : "") + '"' + (nx ? "" : " disabled") + ">▶ Iniciar</button>"
+  });
 }
 function taskRow(it, tid, isNext) {
   const c = taskColor(it);
